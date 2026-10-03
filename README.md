@@ -1,12 +1,16 @@
 # pb-os: SteamOS ARM for Snapdragon handhelds
 
 > [!IMPORTANT]
-> **This fork was built with a coding agent: [Claude Code](https://www.anthropic.com/claude-code),
-> running Anthropic's Claude Opus 5.5 (`claude-opus-5-5`).** Claude wrote the
-> code, the commit messages and this README, **except the statement right
-> below**, which lavachemist, a human, wrote by hand. People set the goals,
-> made the decisions and did the hands-on testing. Review the code before you
-> rely on it.
+> **Project Barry's additions to this fork were built with a coding agent:
+> [Claude Code](https://www.anthropic.com/claude-code), running Anthropic's
+> Claude Opus 5.5 (`claude-opus-5-5`).** This applies only to what Project
+> Barry added on top of hashtagbasit's
+> [SteamOS-ARM-Handhelds](https://github.com/hashtagbasit/SteamOS-ARM-Handhelds):
+> Claude wrote that code, its commit messages and this README, **except the
+> statement right below**, which lavachemist, a human, wrote by hand. The
+> upstream code, and the projects it builds on, is its own authors' work.
+> People set the goals, made the decisions and did the hands-on testing.
+> Review the code before you rely on it.
 
 ### A note from lavachemist (written by a human)
 
