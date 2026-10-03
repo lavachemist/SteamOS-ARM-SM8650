@@ -293,6 +293,12 @@ FIREFOX_PREFS = {
 # should not bring up the keyboard as the app opens, nor when an app comes
 # back (the tile tap that brought it is a touch too).
 LAUNCH_QUIET_S = 3.0
+# A Firefox app opening resizes itself and paints black and grey before its
+# page (Firefox's own window size, then its smallest, then full screen): a
+# cover (Keyboard.qml's overlay window) hides that until the page has loaded.
+CURTAIN_POLL_MS = 250
+CURTAIN_PAINT_S = 0.5  # after the page says it has loaded, for its first paint
+CURTAIN_MAX_S = 15.0
 SWITCH_QUIET_S = 1.5
 # Text focus shows the keyboard only this soon after a touch.
 TOUCH_NAME = "bottom_touchscreen"
@@ -355,6 +361,8 @@ class State:
         self.touch_began: float | None = None  # monotonic: the latest touch's first finger down
         self.touch_at: tuple[int, int] | None = None  # where (screen pixels) that finger came down
         self.hidden_by_hand = 0.0  # monotonic: the keyboard's own hide (its ⌄ key, a tap beside it)
+        self.curtain = ""  # the name of the Firefox app opening under the cover, if any
+        self.curtain_app: str | None = None
         self.text_acc = None  # the focused editable field, if any
         self.keyboard_height = 0  # the key panel's height, as Keyboard.qml reports it
         self.inset: int | None = None  # GAMESCOPE_FOCUS_BOTTOM_INSET last set
@@ -381,9 +389,9 @@ class State:
             self.visible = visible
             if top is not None:
                 self.top = top
-        # Touches go to the keyboard only while it shows; it turns opaque
-        # on its next poll (100 ms).
-        keyboard_input_focus(visible)
+        # Touches go to the keyboard's window only while it (or the cover
+        # over an opening app) shows; it turns opaque on its next poll.
+        keyboard_input_focus(visible or STATE.curtain_app is not None)
         apply_inset()
 
 
@@ -499,6 +507,7 @@ def go_home() -> None:
     # The home screen slides in (Shell.qml): it sees the new serial, puts
     # itself at the animation's start while still hidden, and says so; then
     # it comes forward. Not waiting long: it comes forward regardless.
+    lower_curtain("left for home")
     with STATE.lock:
         STATE.home_serial += 1
         STATE.home_ready.clear()
@@ -701,6 +710,7 @@ def launch(app: str) -> tuple[int, dict]:
     else:
         cmd = ["firefox", "--no-remote", "--profile", profile, *spec["args"]]
         env = app_env(MOZ_USE_XINPUT2="1", MOZ_ENABLE_WAYLAND="0")
+        raise_curtain(app)
     STATE.apps[app] = subprocess.Popen(
         cmd,
         env=env,
@@ -708,7 +718,79 @@ def launch(app: str) -> tuple[int, dict]:
     )
     STATE.quiet_until = time.monotonic() + LAUNCH_QUIET_S
     log(f"started {app} (pid {STATE.apps[app].pid})")
+    if STATE.curtain_app == app:
+        GLib.timeout_add(CURTAIN_POLL_MS, watch_curtain, app, STATE.apps[app], time.monotonic(), [None])
     return 200, {"ok": True, "running": False}
+
+
+def raise_curtain(app: str) -> None:
+    """Cover the screen while a Firefox app opens (Keyboard.qml draws it,
+    over everything, and takes the touches meanwhile)."""
+    STATE.curtain_app = app
+    STATE.curtain = APPS[app]["name"]
+    keyboard_input_focus(True)
+
+
+def lower_curtain(why: str) -> None:
+    if STATE.curtain_app is None:
+        return
+    log(f"{STATE.curtain_app} {why}: cover off")
+    STATE.curtain_app = None
+    STATE.curtain = ""
+    keyboard_input_focus(STATE.keyboard()["visible"])
+
+
+def page_loaded(pid: int) -> bool:
+    """Has the Firefox with this pid a web page (not about:) shown and no
+    longer loading?"""
+    desk = Atspi.get_desktop(0)
+    for i in range(desk.get_child_count()):
+        fx = desk.get_child_at_index(i)
+        if fx is None or fx.get_process_id() != pid:
+            continue
+        todo = [(fx, 0)]
+        while todo:
+            acc, depth = todo.pop()
+            if acc.get_role() == Atspi.Role.DOCUMENT_WEB:
+                states = acc.get_state_set()
+                url = (acc.get_document_attributes() or {}).get("DocURL", "")
+                if (url.startswith("http") and states.contains(Atspi.StateType.SHOWING)
+                        and not states.contains(Atspi.StateType.BUSY)):
+                    return True
+                continue  # not inside a page
+            # application > frame > panel > scroll pane > internal frame >
+            # document web; not into the toolbars and their menus.
+            if depth < 5 and acc.get_role() not in (Atspi.Role.TOOL_BAR, Atspi.Role.MENU, Atspi.Role.MENU_BAR):
+                for j in range(acc.get_child_count()):
+                    c = acc.get_child_at_index(j)
+                    if c is not None:
+                        todo.append((c, depth + 1))
+    return False
+
+
+def watch_curtain(app: str, proc: subprocess.Popen, started: float, loaded_at: list) -> bool:
+    """Every CURTAIN_POLL_MS while a Firefox app opens: the cover comes off
+    once its page has loaded and painted, if it quits, or at the latest after
+    CURTAIN_MAX_S."""
+    if STATE.curtain_app != app:
+        return False  # off already (home, another app)
+    if proc.poll() is not None:
+        lower_curtain("quit while opening")
+        return False
+    now = time.monotonic()
+    if now - started > CURTAIN_MAX_S:
+        lower_curtain(f"still loading after {CURTAIN_MAX_S:.0f} s")
+        return False
+    if loaded_at[0] is None:
+        try:
+            if page_loaded(proc.pid):
+                loaded_at[0] = now
+        except GLib.Error:
+            pass
+    elif now - loaded_at[0] >= CURTAIN_PAINT_S:
+        lower_curtain(f"loaded in {loaded_at[0] - started:.1f} s")
+        return False
+    return True
 
 
 def close(app: str) -> tuple[int, dict]:
@@ -1142,7 +1224,7 @@ class Handler(BaseHTTPRequestHandler):
             if h.isdigit() and int(h) != STATE.keyboard_height:
                 STATE.keyboard_height = int(h)
                 apply_inset()
-            self._json(200, STATE.keyboard())
+            self._json(200, dict(STATE.keyboard(), curtain=STATE.curtain))
         elif path == "/top-keyboard":
             with STATE.lock:
                 self._json(200, dict(STATE.top_keyboard))

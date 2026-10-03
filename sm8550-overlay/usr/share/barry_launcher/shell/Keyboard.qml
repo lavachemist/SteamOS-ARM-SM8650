@@ -6,6 +6,9 @@
 // half, upper) part; tapping the rest hides it.
 // The window stays mapped and hides by opacity, as Steam's overlay does
 // (gamescope ignores property changes on unmapped windows).
+// It also covers the screen while a Firefox app opens ("curtain" in the
+// poll's answer: the app's name), hiding Firefox resizing itself and its
+// black and grey first frames until its page has loaded.
 //
 // Desktop Mode ("desktop" argument, under KWin; a KWin rule keeps it from
 // taking focus): just the keys, along the bottom output's lower edge (KWin's
@@ -25,7 +28,7 @@ Window {
     visibility: desktop ? Window.Windowed : Window.FullScreen
     // Window opacity does nothing under Wayland: in Desktop Mode the keys
     // themselves hide, over a transparent window.
-    opacity: desktop || shown ? 1 : 0
+    opacity: desktop || shown || covering ? 1 : 0
     width: 1240
     height: desktop ? panel.implicitHeight : 1080
 
@@ -34,6 +37,9 @@ Window {
     property bool shown: false
     property bool atTop: false
     property bool polling: false
+    property string curtain: ""  // the app opening under the cover
+    property string curtainName: ""  // kept while the cover fades away
+    readonly property bool covering: !desktop && (curtain !== "" || coverFade.running)
 
     function request(method, path, body, callback) {
         const x = new XMLHttpRequest()
@@ -62,7 +68,10 @@ Window {
     }
 
     // Tapping outside the keys hides the keyboard.
-    TapHandler { onTapped: win.hide() }
+    TapHandler {
+        enabled: !win.covering
+        onTapped: win.hide()
+    }
 
     KeyPanel {
         id: panel
@@ -93,6 +102,14 @@ Window {
                 if (!st)
                     return
                 win.atTop = st.top
+                const c = st.curtain || ""
+                if (c !== win.curtain) {
+                    if (c !== "")
+                        win.curtainName = c
+                    else
+                        coverFade.restart()
+                    win.curtain = c
+                }
                 if (st.visible && !win.shown) {
                     panel.reset()
                     win.shown = true
@@ -100,6 +117,60 @@ Window {
                     win.shown = false
                 }
             })
+        }
+    }
+
+    // The cover over an opening Firefox app: like the home screen it came
+    // from, the app's name and a slow pulse; it fades out once the page is in.
+    Rectangle {
+        id: cover
+        anchors.fill: parent
+        visible: win.covering
+        color: "black"
+        opacity: win.curtain !== "" ? 1 : 0
+        NumberAnimation on opacity {
+            id: coverFade
+            running: false
+            from: 1
+            to: 0
+            duration: 180
+        }
+        // Touches on it go nowhere (not to the app being made beneath).
+        TapHandler {}
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 28 * win.s
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: win.curtainName
+                color: "#eef0f4"
+                font { family: "Noto Sans"; pixelSize: 44 * win.s; weight: Font.DemiBold }
+            }
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 18 * win.s
+                Repeater {
+                    model: 3
+                    delegate: Rectangle {
+                        id: dot
+                        required property int index
+                        width: 16 * win.s
+                        height: width
+                        radius: width / 2
+                        color: "#8a5cf0"
+                        opacity: 0.25
+                        SequentialAnimation on opacity {
+                            running: win.covering
+                            loops: Animation.Infinite
+                            PauseAnimation { duration: dot.index * 160 }
+                            NumberAnimation { to: 1; duration: 320 }
+                            NumberAnimation { to: 0.25; duration: 320 }
+                            PauseAnimation { duration: (2 - dot.index) * 160 }
+                        }
+                    }
+                }
+            }
         }
     }
 }
