@@ -509,7 +509,7 @@ function GamesSection() {
         save([...(links || []).filter((l) => l.game !== g.id), { game: g.id, gameName: g.name, app, close }]);
     };
     const linked = (links || []).find((l) => l.game === game);
-    return jsxs(DFL.PanelSection, { title: "Apps with games", children: [
+    return jsxs(DFL.PanelSection, { title: "Companion Apps", children: [
         err && note(err),
         games.length === 0 && note("Play a game first: the games you've played are listed here."),
         games.length > 0 && row(jsx(DFL.DropdownItem, {
