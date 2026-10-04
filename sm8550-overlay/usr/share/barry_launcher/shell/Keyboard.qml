@@ -75,8 +75,10 @@ Window {
 
     KeyPanel {
         id: panel
-        // The window shows while the cover is up: not the keys then.
-        visible: win.shown || (!win.desktop && !win.covering)
+        // Only while up: the window's opacity follows a moment after the
+        // keys (an X property), so keys left drawn in a window going
+        // transparent flashed as an opening app's cover went away.
+        visible: win.shown
         autocorrect: true
         width: parent.width
         height: implicitHeight
