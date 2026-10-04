@@ -464,13 +464,25 @@ function AppsSection() {
     ] });
 }
 
+// The Games tab's picks. A dropdown's list remounts the panel, which would
+// otherwise put the Game back on the last one played.
+const gamePicks = { game: null, app: null, close: true };
+
 function GamesSection() {
     const [links, setLinks] = useState(null);
     const [apps, setApps] = useState([]);
     const [games] = useState(linkableGames);
-    const [game, setGame] = useState(games.length ? games[0].id : null);
-    const [app, setApp] = useState(null);
-    const [close, setClose] = useState(true);
+    const [game, setGameState] = useState(() =>
+        games.some((g) => g.id === gamePicks.game) ? gamePicks.game : (games.length ? games[0].id : null));
+    const [app, setAppState] = useState(gamePicks.app);
+    const [close, setCloseState] = useState(gamePicks.close);
+    const setGame = (v) => { gamePicks.game = v; setGameState(v); };
+    const setApp = (v) => setAppState((cur) => {
+        const next = typeof v === "function" ? v(cur) : v;
+        gamePicks.app = next;
+        return next;
+    });
+    const setClose = (v) => { gamePicks.close = v; setCloseState(v); };
     const [err, setErr] = useState("");
     const load = useCallback(() => {
         getGameLinks().then((r) => {
@@ -483,7 +495,7 @@ function GamesSection() {
                 // companions to a game.
                 const list = r.apps.filter((a) => a.id !== "trackpad" && a.id !== "keyboard");
                 setApps(list);
-                setApp((cur) => cur || (list.length ? list[0].id : null));
+                setApp((cur) => (list.some((a) => a.id === cur) ? cur : (list.length ? list[0].id : null)));
             }
         }).catch(() => {});
     }, []);
