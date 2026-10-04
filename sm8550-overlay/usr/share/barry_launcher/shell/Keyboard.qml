@@ -6,9 +6,9 @@
 // half, upper) part; tapping the rest hides it.
 // The window stays mapped and hides by opacity, as Steam's overlay does
 // (gamescope ignores property changes on unmapped windows).
-// It also covers the screen while a Firefox app opens ("curtain" in the
-// poll's answer: the app's name), hiding Firefox resizing itself and its
-// black and grey first frames until its page has loaded.
+// It also covers the screen while an app opens ("curtain" in the poll's
+// answer: the app's name), hiding its flicker (Firefox resizing itself and
+// painting black and grey, Signal's white first frames) until it is ready.
 //
 // Desktop Mode ("desktop" argument, under KWin; a KWin rule keeps it from
 // taking focus): just the keys, along the bottom output's lower edge (KWin's
@@ -120,7 +120,7 @@ Window {
         }
     }
 
-    // The cover over an opening Firefox app: like the home screen it came
+    // The cover over an opening app: like the home screen it came
     // from, the app's name and a slow pulse; it fades out once the page is in.
     Rectangle {
         id: cover
