@@ -87,8 +87,22 @@ Rectangle {
             }
         }
 
-        // Close badge on a running app.
+        // Close badge on a running app. Its touch area is wider than the
+        // badge, so a finger needn't hit the badge itself.
+        Item {
+            visible: tile.isRunning
+            x: badge.x - (width - badge.width) / 2
+            y: badge.y - (height - badge.height) / 2
+            width: 150 * home.ts
+            height: 150 * home.ts
+            TapHandler {
+                id: closeTap
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+                onTapped: home.close(tile.app)
+            }
+        }
         Rectangle {
+            id: badge
             visible: tile.isRunning
             x: face.x + face.width - width * 0.7
             y: -height * 0.3
@@ -105,11 +119,6 @@ Rectangle {
                 kind: "close"
                 color: "#eef0f4"
                 lineWidth: 6 * home.ts
-            }
-            TapHandler {
-                id: closeTap
-                gesturePolicy: TapHandler.ReleaseWithinBounds
-                onTapped: home.close(tile.app)
             }
         }
 
