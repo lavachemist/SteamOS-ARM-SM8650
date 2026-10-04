@@ -779,6 +779,9 @@ def page_shown(pid: int) -> bool:
         fx = desk.get_child_at_index(i)
         if fx is None or fx.get_process_id() != pid:
             continue
+        # This side keeps the app's tree as it last saw it (no listener for
+        # its changes here): a Firefox just started looked empty for good.
+        fx.clear_cache()
         todo = [(fx, 0)]
         while todo:
             acc, depth = todo.pop()
@@ -819,8 +822,8 @@ def watch_curtain(app: str, kind: str, ready, proc: subprocess.Popen, started: f
         try:
             if ready():
                 ready_at[0] = now
-        except GLib.Error:
-            pass
+        except GLib.Error as err:
+            log(f"{app}: cannot tell whether it is ready: {err}")
     elif now - ready_at[0] >= CURTAIN[kind]["paint"]:
         lower_curtain(f"ready in {ready_at[0] - started:.1f} s")
         return False

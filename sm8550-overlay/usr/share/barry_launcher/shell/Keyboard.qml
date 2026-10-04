@@ -75,7 +75,8 @@ Window {
 
     KeyPanel {
         id: panel
-        visible: !win.desktop || win.shown
+        // The window shows while the cover is up: not the keys then.
+        visible: win.shown || (!win.desktop && !win.covering)
         autocorrect: true
         width: parent.width
         height: implicitHeight
